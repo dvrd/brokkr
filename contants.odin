@@ -39,7 +39,8 @@ _opt_mode_to_arg := [Opt_Mode]string {
 
 _build_mode_to_arg := [Build_Mode]string {
 	.None    = "",
-	.EXE     = "-build-mode:exe",
+	.Exe     = "-build-mode:exe",
+	.Static  = "-build-mode:static",
 	.Shared  = "-build-mode:shared",
 	.OBJ     = "-build-mode:obj",
 	.ASM     = "-build-mode:asm",

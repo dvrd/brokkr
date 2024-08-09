@@ -11,7 +11,8 @@ import "core:time"
 
 Build_Mode :: enum {
 	None,
-	EXE,
+	Exe,
+	Static,
 	Shared,
 	OBJ,
 	ASM,
@@ -272,7 +273,6 @@ build_odin_args :: proc(config: Odin_Config, allocator := context.allocator) -> 
 	return strings.to_string(sb)
 }
 
-
 odin :: proc(
 	command_type: Odin_Command_Type,
 	config: Odin_Config,
@@ -306,7 +306,7 @@ odin :: proc(
 	}
 
 	err := launch({cmd, config.src_path, args_str})
-	if err != .ERROR_NONE do log.error("Failed compilation of src due to:", os.get_last_error_string())
+	if err != nil do log.error("Failed compilation of src due to:", os.get_last_error_string())
 
 	return true
 }
@@ -314,7 +314,7 @@ odin :: proc(
 get_time :: proc(pathname: string) -> i64 {
 	fi, err := os.stat(pathname)
 	defer os.file_info_delete(fi)
-	if err != os.ERROR_NONE {
+	if err != nil {
 		fmt.eprintfln("ERROR: could not stat %s: %s", pathname, os.get_last_error_string())
 		os.exit(1)
 	}
