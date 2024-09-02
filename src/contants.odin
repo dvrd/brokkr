@@ -87,6 +87,7 @@ _arch_to_arg := [runtime.Odin_Arch_Type]string {
 	.arm64     = "arm64",
 	.wasm32    = "wasm32",
 	.wasm64p32 = "wasm64p32",
+	.riscv64   = "riscv64",
 }
 
 _abi_to_arg := [Platform_ABI]string {

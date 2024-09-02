@@ -3,7 +3,7 @@ package brokkr
 import "base:runtime"
 import "core:fmt"
 import "core:log"
-import "core:os"
+import os "core:os/os2"
 import "core:path/filepath"
 import "core:slice"
 import "core:strings"
@@ -177,105 +177,117 @@ split_odin_args :: proc(args: string, allocator := context.allocator) -> []strin
 	return strings.split(args, " ", allocator)
 }
 
-build_odin_args :: proc(config: Odin_Config, allocator := context.allocator) -> (args: string) {
-	insert_space :: proc(sb: ^strings.Builder) {
-		strings.write_rune(sb, ' ')
-	}
-
+build_odin_args :: proc(
+	cmd: string,
+	config: Odin_Config,
+	extra_args: []string,
+	allocator := context.allocator,
+) -> (
+	args: []string,
+) {
 	context.allocator = allocator
-	sb := strings.builder_make()
+	odin_args := make([dynamic]string, context.allocator)
 
-	fmt.sbprintf(&sb, `-out:"%s/%s"`, config.out_dir, config.out_file)
+	append(&odin_args, "odin")
+	append(&odin_args, cmd)
+	append(&odin_args, filepath.base(config.src_path))
+	append(&odin_args, fmt.tprintf("-out:%s/%s", config.out_dir, config.out_file))
 
 	if config.platform.os == .Windows {
-		if config.pdb_name != "" do fmt.sbprintf(&sb, ` -pdb-name:"%s"`, config.pdb_name)
-		if config.rc_path != "" do fmt.sbprintf(&sb, ` -resource:"%s"`, config.rc_path)
+		if config.pdb_name != "" do append(&odin_args, fmt.tprintf("-pdb-name:%s", config.pdb_name))
+		if config.rc_path != "" do append(&odin_args, fmt.tprintf("-resource:%s", config.rc_path))
 		switch config.subsystem {
 		case .Console:
-			strings.write_string(&sb, " -subsystem:console")
+			append(&odin_args, "-subsystem:console")
 		case .Windows:
-			strings.write_string(&sb, " -subsystem:windows")
+			append(&odin_args, "-subsystem:windows")
 		}
 	}
 
 	if config.build_mode != .None {
-		insert_space(&sb)
-		strings.write_string(&sb, _build_mode_to_arg[config.build_mode])
+		append(&odin_args, _build_mode_to_arg[config.build_mode])
 	}
 
 	if config.opt != .None {
-		insert_space(&sb)
-		strings.write_string(&sb, _opt_mode_to_arg[config.opt])
+		append(&odin_args, _opt_mode_to_arg[config.opt])
 	}
 
 	if config.reloc != .Default {
-		insert_space(&sb)
-		strings.write_string(&sb, _reloc_mode_to_arg[config.reloc])
+		append(&odin_args, _reloc_mode_to_arg[config.reloc])
 	}
 
 	for flag in Vet_Flag do if flag in config.vet {
-		insert_space(&sb)
-		strings.write_string(&sb, _vet_flag_to_arg[flag])
+		append(&odin_args, _vet_flag_to_arg[flag])
 	}
 	for flag in Compiler_Flag do if flag in config.flags {
-		insert_space(&sb)
-		strings.write_string(&sb, _compiler_flag_to_arg[flag])
+		append(&odin_args, _compiler_flag_to_arg[flag])
 	}
 	for flag in Sanitize_Flag do if flag in config.sanitize {
-		insert_space(&sb)
-		strings.write_string(&sb, _sanitize_to_arg[flag])
+		append(&odin_args, _sanitize_to_arg[flag])
 	}
 	if config.style != .None {
-		insert_space(&sb)
-		strings.write_string(&sb, _style_mode_to_arg[config.style])
+		append(&odin_args, _style_mode_to_arg[config.style])
 	}
 	for collection in config.collections {
-		fmt.sbprintf(&sb, " -collection:%s=\"%s\"", collection.name, collection.path)
+		append(&odin_args, fmt.tprintf("-collection:%s=\"%s\"", collection.name, collection.path))
 	}
 	for define in config.defines {
 		switch val in define.val {
 		case string:
-			fmt.sbprintf(&sb, " -define:%s=\"%s\"", define.name, val)
+			append(&odin_args, fmt.tprintf("-define:%s=\"%s\"", define.name, val))
 		case bool:
-			fmt.sbprintf(&sb, " -define:%s=%s", define.name, "true" if val else "false")
+			append(
+				&odin_args,
+				fmt.tprintf("-define:%s=%s", define.name, "true" if val else "false"),
+			)
 		case int:
-			fmt.sbprintf(&sb, " -define:%s=%d", define.name, val)
+			append(&odin_args, fmt.tprintf("-define:%s=%d", define.name, val))
 		}
 	}
 
 	if config.platform.os != .Unknown {
 		if config.abi == .Default {
-			fmt.sbprintf(
-				&sb,
-				" -target:%s_%s",
-				_os_to_arg[config.platform.os],
-				_arch_to_arg[config.platform.arch],
+			append(
+				&odin_args,
+				fmt.tprintf(
+					"-target:%s_%s",
+					_os_to_arg[config.platform.os],
+					_arch_to_arg[config.platform.arch],
+				),
 			)
 		} else {
-			fmt.sbprintf(
-				&sb,
-				" -target:%s_%s_%s",
-				_os_to_arg[config.platform.os],
-				_arch_to_arg[config.platform.arch],
-				_abi_to_arg[config.abi],
+			append(
+				&odin_args,
+				fmt.tprintf(
+					"-target:%s_%s_%s",
+					_os_to_arg[config.platform.os],
+					_arch_to_arg[config.platform.arch],
+					_abi_to_arg[config.abi],
+				),
 			)
 		}
 	}
 
 	if config.thread_count > 0 {
-		fmt.sbprintf(&sb, " -thread-count:%d", config.thread_count)
+		append(&odin_args, fmt.tprintf("-thread-count:%d", config.thread_count))
 	}
 
 	if config.timings.mode != .Disabled {
-		fmt.sbprintf(&sb, " %s", _timings_mode_to_arg[config.timings.mode])
+		append(&odin_args, fmt.tprintf("%s", _timings_mode_to_arg[config.timings.mode]))
 	}
 
-	return strings.to_string(sb)
+	if len(extra_args) > 0 {
+		append(&odin_args, "--")
+		for arg in extra_args do append(&odin_args, arg)
+	}
+
+	return odin_args[:]
 }
 
 odin :: proc(
 	command_type: Odin_Command_Type,
 	config: Odin_Config,
+	extra_args: []string,
 	print_command := true,
 	loc := #caller_location,
 ) -> (
@@ -297,34 +309,47 @@ odin :: proc(
 		panic("Invalid command_type")
 	}
 
-	make_directory(config.out_dir)
-	args_str := build_odin_args(config, context.temp_allocator)
+	err := os.mkdir_all(config.out_dir)
+	assert(
+		err == nil || err == .Exist,
+		fmt.tprintf(
+			"Failed to create target directory `{}`: {}",
+			config.out_dir,
+			os.error_string(err),
+		),
+	)
+
+	odin_args := build_odin_args(cmd, config, extra_args, context.temp_allocator)
 
 	if print_command {
 		log.info("Executing:")
-		fmt.println("odin", cmd, config.src_path, args_str)
+		fmt.println(strings.join(odin_args, " "))
 	}
 
-	err := launch({cmd, config.src_path, args_str})
-	if err != nil do log.error("Failed compilation of src due to:", os.get_last_error_string())
+	if !launch(odin_args) {
+		log.error("Compilation failed")
+		return false
+	}
 
 	return true
 }
 
-get_time :: proc(pathname: string) -> i64 {
-	fi, err := os.stat(pathname)
-	defer os.file_info_delete(fi)
-	if err != nil {
-		fmt.eprintfln("ERROR: could not stat %s: %s", pathname, os.get_last_error_string())
-		os.exit(1)
-	}
-	return time.time_to_unix_nano(fi.modification_time)
-}
 
-
-CWD := os.get_current_directory()
 should_rebuild :: proc(src, bin: string, allocator := context.temp_allocator) -> bool {
-	src := filepath.join({CWD, src}, allocator)
-	bin := filepath.join({CWD, bin}, allocator)
-	return get_time(src) > get_time(bin)
+	cwd, getwd_err := os.getwd(allocator)
+	assert(getwd_err == nil, fmt.tprint("Could not get currrent working directory:", getwd_err))
+
+	src_path := filepath.join({cwd, src}, allocator)
+	assert(os.exists(src_path), fmt.tprint("`{}` should exist", src_path))
+
+	src_mod_time, src_err := os.modification_time_by_path(src_path)
+	assert(src_err == nil, fmt.tprint("Could not get `{}`'s time: {}", src_path, src_err))
+
+	bin_path := filepath.join({cwd, bin}, allocator)
+	assert(os.exists(bin_path), fmt.tprint("`{}` should exist", bin_path))
+
+	bin_mod_time, bin_err := os.modification_time_by_path(bin_path)
+	assert(bin_err == nil, fmt.tprint("Could not get `{}`'s time: {}", bin_path, bin_err))
+
+	return time.time_to_unix_nano(src_mod_time) > time.time_to_unix_nano(bin_mod_time)
 }
